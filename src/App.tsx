@@ -1,13 +1,11 @@
-import { RootWrapper } from "./styles";
 import SceneWrapper from "./components/SceneWrapper";
+import Particles from "./components/Particles";
 
 function App() {
   return (
-    <RootWrapper>
-      <SceneWrapper>
-        <Particles />
-      </SceneWrapper>
-    </RootWrapper>
+    <SceneWrapper>
+      <Particles />
+    </SceneWrapper>
   );
 }
 
