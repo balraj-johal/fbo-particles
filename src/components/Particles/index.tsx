@@ -11,23 +11,69 @@ import {
   AdditiveBlending,
   ShaderMaterial,
   DataTexture,
+  MathUtils,
+  Points,
 } from "three";
-import { createPortal, useFrame } from "@react-three/fiber";
-import { extend } from "@react-three/fiber";
+import { createPortal, useFrame, extend } from "@react-three/fiber";
 import { useFBO } from "@react-three/drei";
+
+import { CurlNoise } from "../../shaders/utils";
 
 const SIZE = 128;
 const LENGTH = SIZE * SIZE;
 
-export const FBOFragmentShader = `
+export const FBOVertexShader = `
+  varying vec2 vUv;
+
   void main() {
-    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    vUv = uv;
+    
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
-export const FBOVertexShader = `
+export const FBOFragmentShader = `
+  uniform sampler2D u_positions;
+  uniform float u_time;
+  uniform float u_frequency;
+
+  varying vec2 vUv;
+
+  // ${CurlNoise}
+
   void main() {
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    vec3 pos = texture2D(u_positions, vUv).rgb;
+    gl_FragColor = vec4(pos, 1.0);
+    // vec3 curledPos = texture2D(u_positions, vUv).rgb; // set initial curled pos to initial pos
+
+    // pos = curlNoise(pos * u_frequency + u_time * 0.1); 
+
+    // curledPos = curlNoise(curledPos * u_frequency + u_time * 0.1);
+    // curledPos += curlNoise(curledPos * u_frequency * 2.0) * 0.5;
+
+    // // mix from pos to curled pos based on sin(time)
+    // gl_FragColor = vec4(mix(pos, curledPos, sin(u_time)), 1.0);
+  }
+`;
+
+const ParticleVertexShader = `
+  uniform sampler2D u_positions;
+
+  void main() {
+    vec3 pos = texture2D(u_positions, position.xy).xyz;
+
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+
+    gl_PointSize = 3.0;
+    // Size attenuation;
+    gl_PointSize *= step(1.0 - (1.0/64.0), position.x) + 0.5;
+  }
+`;
+
+const ParticleFragmentShader = `
+  void main() {
+    vec3 color = vec3(0.34, 0.53, 0.96);
+    gl_FragColor = vec4(color, 1.0);
   }
 `;
 
@@ -37,8 +83,18 @@ const generatePositions = (width: number, height: number) => {
   const length = width * height * 4;
   const data = new Float32Array(length);
 
-  // Fill Float32Array here
-  data.fill(0.5);
+  for (let i = 0; i < length; i++) {
+    const stride = i * 4;
+
+    const distance = 1;
+    const theta = MathUtils.randFloatSpread(360);
+    const phi = MathUtils.randFloatSpread(360);
+
+    data[stride] = distance * Math.sin(theta) * Math.cos(phi);
+    data[stride + 1] = distance * Math.sin(theta) * Math.sin(phi);
+    data[stride + 2] = distance * Math.cos(theta);
+    data[stride + 3] = 1.0; // this value will not have any impact
+  }
 
   return data;
 };
@@ -59,6 +115,7 @@ export class FboMaterial extends ShaderMaterial {
       // Pass the positions Data Texture as a uniform
       u_positions: { value: positionTexture },
       u_time: { value: 0 },
+      u_frequency: { value: 0.25 },
     };
 
     super({
@@ -73,14 +130,14 @@ extend({ FboMaterial });
 
 const Particles = () => {
   // This reference gives us direct access to our points
-  const pointsMatRef = useRef<ShaderMaterial>(null);
+  const pointsMatRef = useRef<Points>(null);
   const fboMatRef = useRef<FboMaterial>(null);
 
   // Create a camera and a scene for our FBO
   const scene = new Scene();
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.0000001, 1);
 
-  // Create a simple square geometry with custom uv and positions attributes
+  // Create a simple geometry with custom uv and positions attributes
   const positions = new Float32Array([
     -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, 1, 1, 0, -1, 1, 0,
   ]);
@@ -96,12 +153,15 @@ const Particles = () => {
   });
 
   // Generate a "buffer" of vertices with normalized coordinates
-  const particlesPosition = new Float32Array(LENGTH * 3);
-  for (let i = 0; i < LENGTH; i++) {
-    const i3 = i * 3;
-    particlesPosition[i3 + 0] = (i % SIZE) / SIZE; // x pos
-    particlesPosition[i3 + 1] = i / SIZE / SIZE; // y pos
-  }
+  const particlesPosition = useMemo(() => {
+    const particles = new Float32Array(LENGTH * 3);
+    for (let i = 0; i < LENGTH; i++) {
+      const stride = i * 3;
+      particles[stride + 0] = (i % SIZE) / SIZE; // x pos
+      particles[stride + 1] = i / SIZE / SIZE; // y pos
+    }
+    return particles;
+  }, []);
 
   // define uniforms, recieving particle positions from the render texture
   const uniforms = useMemo(
@@ -113,24 +173,25 @@ const Particles = () => {
     []
   );
 
-  useFrame((state) => {
-    const { gl, clock } = state;
-
+  useFrame(({ gl, clock }) => {
     // Set the current render target to our FBO
     gl.setRenderTarget(renderTarget);
     gl.clear();
-    // Render the simulation material with square geometry in the render target
+    // Render the simulation material with given geometry in the render target
     gl.render(scene, camera);
-    // Revert to the default render target
-    gl.setRenderTarget(null);
+    gl.setRenderTarget(null); // Revert to the default render target
 
     // Read the position data from the texture field of the render target
-    // and send that data to the final shaderMaterial via the `uPositions` uniform
-    if (pointsMatRef.current)
-      pointsMatRef.current.uniforms.u_positions.value = renderTarget.texture;
+    // and send that data to the final shaderMaterial via the `u_positions` uniform
+    if (pointsMatRef.current) {
+      (
+        pointsMatRef.current.material as ShaderMaterial
+      ).uniforms.u_positions.value = renderTarget.texture;
+    }
 
-    if (fboMatRef.current)
+    if (fboMatRef.current) {
       fboMatRef.current.uniforms.u_time.value = clock.elapsedTime;
+    }
   });
 
   return (
@@ -156,7 +217,7 @@ const Particles = () => {
         </mesh>,
         scene
       )}
-      <points>
+      <points ref={pointsMatRef}>
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
@@ -166,11 +227,10 @@ const Particles = () => {
           />
         </bufferGeometry>
         <shaderMaterial
-          ref={pointsMatRef}
           blending={AdditiveBlending}
           depthWrite={false}
-          fragmentShader={FBOFragmentShader}
-          vertexShader={FBOVertexShader}
+          fragmentShader={ParticleFragmentShader}
+          vertexShader={ParticleVertexShader}
           uniforms={uniforms}
         />
       </points>
