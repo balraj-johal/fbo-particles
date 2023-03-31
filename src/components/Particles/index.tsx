@@ -13,7 +13,7 @@ import {
   Points,
 } from "three";
 import { createPortal, useFrame, extend } from "@react-three/fiber";
-import { Plane, useFBO } from "@react-three/drei";
+import { OrbitControls, useFBO } from "@react-three/drei";
 
 import { CurlNoise } from "../../shaders/utils";
 import { FboMaterial } from "./FboMaterial";
@@ -27,7 +27,12 @@ export const FBOVertexShader = `
   void main() {
     vUv = uv;
     
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+
+    vec4 modelPosition = modelMatrix * vec4(position, 1.0);
+    vec4 viewPosition = viewMatrix * modelPosition;
+    vec4 projectedPosition = projectionMatrix * viewPosition;
+
+    gl_Position = projectedPosition;
   }
 `;
 
@@ -38,20 +43,19 @@ export const FBOFragmentShader = `
 
   varying vec2 vUv;
 
-  // ${CurlNoise}
+  ${CurlNoise}
 
   void main() {
     vec3 pos = texture2D(u_positions, vUv).rgb;
-    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
-    // vec3 curledPos = texture2D(u_positions, vUv).rgb; // set initial curled pos to initial pos
+    vec3 curledPos = texture2D(u_positions, vUv).rgb; // set initial curled pos to initial pos
 
-    // pos = curlNoise(pos * u_frequency + u_time * 0.1); 
+    pos = curlNoise(pos * u_frequency + u_time * 0.1); 
 
-    // curledPos = curlNoise(curledPos * u_frequency + u_time * 0.1);
-    // curledPos += curlNoise(curledPos * u_frequency * 2.0) * 0.5;
+    curledPos = curlNoise(curledPos * u_frequency + u_time * 0.1);
+    curledPos += curlNoise(curledPos * u_frequency * 2.0) * 0.5;
 
-    // // mix from pos to curled pos based on sin(time)
-    // gl_FragColor = vec4(mix(pos, curledPos, sin(u_time)), 1.0);
+    // mix from pos to curled pos based on sin(time)
+    gl_FragColor = vec4(mix(pos, curledPos, sin(u_time)), 1.0);
   }
 `;
 
@@ -75,6 +79,7 @@ const ParticleFragmentShader = `
     gl_FragColor = vec4(color, 1.0);
   }
 `;
+
 extend({ FboMaterial });
 
 const Particles = () => {
@@ -84,7 +89,7 @@ const Particles = () => {
 
   // Create a camera and a scene for our FBO
   const scene = new Scene();
-  const camera = new OrthographicCamera(-1, 1, 1, -1, 0.0000001, 1);
+  const camera = new OrthographicCamera(-1, 1, 1, -1, 1 / Math.pow(2, 53), 1);
 
   // Create a simple geometry with custom uv and positions attributes
   const positions = new Float32Array([
@@ -108,6 +113,7 @@ const Particles = () => {
       const stride = i * 3;
       particles[stride + 0] = (i % SIZE) / SIZE; // x pos
       particles[stride + 1] = i / SIZE / SIZE; // y pos
+      // particles[stride + 2] = i / SIZE / SIZE; // z pos?
     }
     return particles;
   }, []);
@@ -145,6 +151,8 @@ const Particles = () => {
 
   return (
     <>
+      <OrbitControls />
+
       {/* Render our simulation material and geometry off-screen */}
       {createPortal(
         <mesh>
@@ -166,9 +174,9 @@ const Particles = () => {
         </mesh>,
         scene
       )}
-      <Plane>
+      {/* <Plane>
         <meshBasicMaterial map={renderTarget.texture} />
-      </Plane>
+      </Plane> */}
       <points ref={pointsMatRef}>
         <bufferGeometry>
           <bufferAttribute
