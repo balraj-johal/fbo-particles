@@ -5,6 +5,7 @@ function App() {
   return (
     <SceneWrapper>
       <Particles />
+      <ambientLight intensity={0.5} />
     </SceneWrapper>
   );
 }
