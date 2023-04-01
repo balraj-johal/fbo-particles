@@ -6,7 +6,45 @@ import {
   ShaderMaterial,
 } from "three";
 
-import { FBOVertexShader, FBOFragmentShader } from ".";
+import { CurlNoise } from "../../shaders/utils";
+
+export const FBOVertexShader = `
+  varying vec2 vUv;
+
+  void main() {
+    vUv = uv;
+    
+
+    vec4 modelPosition = modelMatrix * vec4(position, 1.0);
+    vec4 viewPosition = viewMatrix * modelPosition;
+    vec4 projectedPosition = projectionMatrix * viewPosition;
+
+    gl_Position = projectedPosition;
+  }
+`;
+
+export const FBOFragmentShader = `
+  uniform sampler2D u_positions;
+  uniform float u_time;
+  uniform float u_frequency;
+
+  varying vec2 vUv;
+
+  ${CurlNoise}
+
+  void main() {
+    vec3 pos = texture2D(u_positions, vUv).rgb;
+    vec3 curledPos = texture2D(u_positions, vUv).rgb; // set initial curled pos to initial pos
+
+    pos = curlNoise(pos * u_frequency + u_time * 0.1); 
+
+    curledPos = curlNoise(curledPos * u_frequency + u_time * 0.1);
+    curledPos += curlNoise(curledPos * u_frequency * 2.0) * 0.5;
+
+    // mix from pos to curled pos based on sin(time)
+    gl_FragColor = vec4(mix(pos, curledPos, sin(u_time)), 1.0);
+  }
+`;
 
 const generatePositions = (width: number, height: number) => {
   // we need to create a vec4 since we're passing the positions to the fragment shader
