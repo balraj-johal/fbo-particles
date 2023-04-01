@@ -6,3 +6,4 @@ Credit to [Maxime Heckel's great tutorial](https://blog.maximeheckel.com/posts/t
 
 https://www.bit-101.com/blog/2021/07/curl-noise-demystified/
 http://petewerner.blogspot.com/2015/02/intro-to-curl-noise.html
+https://mofu-dev.com/en/blog/stable-fluids/#implementation
