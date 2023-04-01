@@ -15,49 +15,10 @@ import {
 import { createPortal, useFrame, extend } from "@react-three/fiber";
 import { OrbitControls, useFBO } from "@react-three/drei";
 
-import { CurlNoise } from "../../shaders/utils";
 import { FboMaterial } from "./FboMaterial";
 
 const SIZE = 128;
 const LENGTH = SIZE * SIZE;
-
-export const FBOVertexShader = `
-  varying vec2 vUv;
-
-  void main() {
-    vUv = uv;
-    
-
-    vec4 modelPosition = modelMatrix * vec4(position, 1.0);
-    vec4 viewPosition = viewMatrix * modelPosition;
-    vec4 projectedPosition = projectionMatrix * viewPosition;
-
-    gl_Position = projectedPosition;
-  }
-`;
-
-export const FBOFragmentShader = `
-  uniform sampler2D u_positions;
-  uniform float u_time;
-  uniform float u_frequency;
-
-  varying vec2 vUv;
-
-  ${CurlNoise}
-
-  void main() {
-    vec3 pos = texture2D(u_positions, vUv).rgb;
-    vec3 curledPos = texture2D(u_positions, vUv).rgb; // set initial curled pos to initial pos
-
-    pos = curlNoise(pos * u_frequency + u_time * 0.1); 
-
-    curledPos = curlNoise(curledPos * u_frequency + u_time * 0.1);
-    curledPos += curlNoise(curledPos * u_frequency * 2.0) * 0.5;
-
-    // mix from pos to curled pos based on sin(time)
-    gl_FragColor = vec4(mix(pos, curledPos, sin(u_time)), 1.0);
-  }
-`;
 
 const ParticleVertexShader = `
   uniform sampler2D u_positions;
@@ -67,8 +28,8 @@ const ParticleVertexShader = `
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
 
-    gl_PointSize = 3.0;
     // Size attenuation;
+    gl_PointSize = 3.0;
     gl_PointSize *= step(1.0 - (1.0/64.0), position.x) + 0.5;
   }
 `;
