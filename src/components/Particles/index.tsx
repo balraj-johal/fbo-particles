@@ -59,7 +59,16 @@ const Particles = () => {
   const uvs = new Float32Array([0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0]);
 
   // define FBO render target
-  const renderTarget = useFBO(SIZE, SIZE, {
+  const renderTargetOne = useFBO(SIZE, SIZE, {
+    minFilter: NearestFilter,
+    magFilter: NearestFilter,
+    format: RGBAFormat,
+    stencilBuffer: false,
+    type: FloatType,
+  });
+
+  // define FBO render target
+  const renderTargetTwo = useFBO(SIZE, SIZE, {
     minFilter: NearestFilter,
     magFilter: NearestFilter,
     format: RGBAFormat,
@@ -90,8 +99,10 @@ const Particles = () => {
   );
 
   useFrame(({ gl, clock }) => {
+    // ---- FIRST TARGET
+
     // Set the current render target to our FBO
-    gl.setRenderTarget(renderTarget);
+    gl.setRenderTarget(renderTargetOne);
     gl.clear();
     // Render the simulation material with given geometry in the render target
     gl.render(scene, camera);
@@ -102,12 +113,14 @@ const Particles = () => {
     if (pointsMatRef.current) {
       (
         pointsMatRef.current.material as ShaderMaterial
-      ).uniforms.u_positions.value = renderTarget.texture;
+      ).uniforms.u_positions.value = renderTargetOne.texture;
     }
 
     if (fboMatRef.current) {
       fboMatRef.current.uniforms.u_time.value = clock.elapsedTime;
     }
+
+    // SECOND TARGET
   });
 
   return (
