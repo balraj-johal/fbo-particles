@@ -28,8 +28,8 @@ const ParticleVertexShader = `
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
 
-    gl_PointSize = 3.0;
     // Size attenuation;
+    gl_PointSize = 3.0;
     gl_PointSize *= step(1.0 - (1.0/64.0), position.x) + 0.5;
   }
 `;
